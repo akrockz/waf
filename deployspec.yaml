@@ -1,0 +1,76 @@
+---
+
+- label: deploy-waf-resources
+  type: create_stack
+  params:
+    template: cfn-waf-resources.yaml
+    stack_name: "{{ core.Portfolio }}-{{ core.App }}-resources"
+    parameters:
+      AppBucketName: "abc-core-waf-applogs"
+    accounts:
+      - "123421"  # POC4
+    regions:
+      - ap-southeast-1  # Asia Pacific (Singapore)
+
+- label: deploy-waf-security-automations-poc4-alb
+  type: create_stack
+  depends_on: [ deploy-waf-resources ]
+  params:
+    stack_name: "{{ core.Portfolio }}-{{ core.App }}-automations-alb"
+    template: cfn-waf-security-automations.yaml
+    parameters:
+      # Core Automation Parameters - see core-automation\lambdas\deployspec_compiler\main.py.__apply_state
+      ArtifactBucketName: "{{ core.ArtifactBucketName }}"
+      ArtifactKeyPrefix: "{{ core.ArtifactKeyPrefix }}"
+      LambdaFunctionNamePrefix: "{{ core.Portfolio }}-{{ core.App }}"  # Updated core-waf lambdas to also use.
+      # WAF Solution Parameters
+      AppAccessLogBucket: "{{ deploy-waf-resources-{Account}-{Region}.AppBucketName }}"  # TODO Lookup vs export?
+      EndpointType: ALB  # Tip: Define new deployspec action to deploy CW version.
+      # Feature activation:
+      # ActivateHttpFloodProtectionParam: 'yes - AWS WAF rate based rule'  # Other options involves log parsing.
+      ActivateHttpFloodProtectionParam: 'yes - Amazon Athena log parser'  # Uses WAF logs, faster than ALB logs.
+      ActivateReputationListsProtectionParam: 'yes'  # List of publicly known scanners/probes/bad bots from 3 sources, periodically updated.
+      # Disabled rules
+      ActivateCrossSiteScriptingProtectionParam: 'no'  # F5WebExploitsRules handles.
+      ActivateSqlInjectionProtectionParam: 'no'  # F5WebExploitsRules handles.
+      ActivateScannersProbesProtectionParam: 'no'  # Needs ALB logging feature turned on.
+      ActivateBadBotProtectionParam: 'no'  # Honeypot implementation - infosec approval & SAA integration required.
+      # Marketplace rule activation (aws waf-regional list-subscribed-rule-groups) - bought by hand, then call API to get rule group IDs and plug in here (per account)
+      # F5BotDetectionSignatures: 'b580a13d-3405-4c3d-a727-c3e0c366e88b123'
+      F5WebExploitsRules: 'eb2e863a-3067-4ea3-a440-4cefe77075123c7'  # account/region specific
+    accounts:
+      - "13212"  # POC4
+    regions:
+      - ap-southeast-1  # Asia Pacific (Singapore)
+
+- label: deploy-waf-security-automations-nonprod-auto
+  type: create_stack
+  depends_on: [ deploy-waf-resources ]
+  params:
+    stack_name: "{{ core.Portfolio }}-{{ core.App }}-automations-alb"
+    template: cfn-waf-security-automations.yaml
+    parameters:
+      # Core Automation Parameters - see core-automation\lambdas\deployspec_compiler\main.py.__apply_state
+      ArtifactBucketName: "{{ core.ArtifactBucketName }}"
+      ArtifactKeyPrefix: "{{ core.ArtifactKeyPrefix }}"
+      LambdaFunctionNamePrefix: "{{ core.Portfolio }}-{{ core.App }}"  # Updated core-waf lambdas to also use.
+      # WAF Solution Parameters
+      AppAccessLogBucket: "{{ deploy-waf-resources-{Account}-{Region}.AppBucketName }}"  # TODO Lookup vs export?
+      EndpointType: ALB  # Tip: Define new deployspec action to deploy CW version.
+      # Feature activation:
+      # ActivateHttpFloodProtectionParam: 'yes - AWS WAF rate based rule'  # Other options involves log parsing.
+      ActivateHttpFloodProtectionParam: 'yes - Amazon Athena log parser'  # Uses WAF logs, faster than ALB logs.
+      ActivateReputationListsProtectionParam: 'yes'  # List of publicly known scanners/probes/bad bots from 3 sources, periodically updated.
+      # Disabled rules
+      ActivateCrossSiteScriptingProtectionParam: 'no'  # F5WebExploitsRules handles.
+      ActivateSqlInjectionProtectionParam: 'no'  # F5WebExploitsRules handles.
+      ActivateScannersProbesProtectionParam: 'no'  # Needs ALB logging feature turned on.
+      ActivateBadBotProtectionParam: 'no'  # Honeypot implementation - infosec approval & SAA integration required.
+      # Marketplace rule activation (aws waf-regional list-subscribed-rule-groups) - bought by hand, then call API to get rule group IDs and plug in here (per account)
+      # F5BotDetectionSignatures: 'SKIP'
+      F5WebExploitsRules: 'eb2e863a-3067-4ea3-a440-4cefe77075c12327'  # account/region specific
+    accounts:
+      - "13224"  # nonprod-auto
+    regions:
+      - ap-southeast-1  # Asia Pacific (Singapore)
+
