@@ -1,0 +1,84 @@
+---
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Core WAF Resources that we've added.
+
+Parameters:
+
+  AppBucketName:
+    Description: "For ALB logging."
+    Type: String
+
+Resources:
+
+  AppBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      BucketName: !Sub "${AppBucketName}-${AWS::AccountId}-${AWS::Region}"
+      VersioningConfiguration:
+        Status: Enabled
+
+  AppBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: AppBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: AppBucketPolicy
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource: !Sub "${AppBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+          - Sid: DenyIncorrectEncryptionHeader
+            Effect: Deny
+            Principal: "*"
+            Action: s3:PutObject
+            Resource: !Sub "${AppBucket.Arn}/*"
+            Condition:
+              # DENY if server side encryption is defined and not AES256
+              'Null':
+                s3:x-amz-server-side-encryption: false
+              StringNotEquals:
+                s3:x-amz-server-side-encryption: AES256
+          - Sid: DelegateElbLogsAccess
+            Effect: Allow
+            Principal:
+              AWS: arn:aws:iam::23432:root
+            Action: s3:PutObject
+            # Current account only. */*/* = portfolio/app/branchshortname.
+            # Mimics the same path as automation bucket... because why not.
+            Resource: !Sub "${AppBucket.Arn}/files/branch/*/*/*/AWSLogs/${AWS::AccountId}/*"
+
+Outputs:
+
+  # ELB logs bucket for apps to use. Will be integrated into core-automation consumables.
+
+  AppBucketName:
+    Value:
+      Ref: AppBucket
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}:AppBucketName"
+
+  AppBucketArn:
+    Value:
+      Fn::GetAtt: [ AppBucket, Arn ]
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}:AppBucketArn"
+
+  AppBucketS3Url:
+    Value:
+      Fn::Sub: "s3://${AppBucket}"
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}:AppBucketS3Url"
